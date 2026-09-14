@@ -1,0 +1,22 @@
+{
+  "project_key": "REPLACE_ME_e.g._MCM_012_HBs-Boom-Seeds",
+  "display_name": "REPLACE_ME human-readable mod name",
+  "curseforge": {
+    "project_id": "REPLACE_ME numeric CurseForge project id",
+    "changelog_type": "markdown",
+    "release_type": "release"
+  },
+  "modrinth": {
+    "project_slug": "REPLACE_ME modrinth project slug"
+  },
+  "version_name_format": "{mc_version}-{mod_version}",
+  "loaders": {
+    "forge": { "dependencies": [] },
+    "neoforge": { "dependencies": [] },
+    "fabric": { "dependencies": [] }
+  },
+  "game_versions": {
+    "1.20.1": ["1.20.1"],
+    "1.21.1": ["1.21.1"]
+  }
+}

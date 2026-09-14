@@ -1,0 +1,71 @@
+{
+  "project_key": "MCM_012_HBs-Boom-Seeds",
+  "display_name": "HB's Boom Seeds",
+  "curseforge": {
+    "project_id": "1696267",
+    "changelog_type": "markdown",
+    "release_type": "release"
+  },
+  "modrinth": {
+    "project_slug": "boom-seeds"
+  },
+  "version_name_format": "{mc_version}-{mod_version}",
+  "loaders": {
+    "forge": {
+      "dependencies": [
+        {
+          "id": "balm",
+          "curseforge_slug": "balm",
+          "modrinth_slug": "balm",
+          "type": "required"
+        },
+        {
+          "id": "hbs-foundation",
+          "curseforge_slug": "hbs-foundation",
+          "modrinth_slug": "hbs-foundation",
+          "type": "required"
+        }
+      ]
+    },
+    "neoforge": {
+      "dependencies": [
+        {
+          "id": "balm",
+          "curseforge_slug": "balm",
+          "modrinth_slug": "balm",
+          "type": "required"
+        },
+        {
+          "id": "hbs-foundation",
+          "curseforge_slug": "hbs-foundation",
+          "modrinth_slug": "hbs-foundation",
+          "type": "required"
+        }
+      ]
+    },
+    "fabric": {
+      "dependencies": [
+        {
+          "id": "balm",
+          "curseforge_slug": "balm",
+          "modrinth_slug": "balm",
+          "type": "required"
+        },
+        {
+          "id": "hbs-foundation",
+          "curseforge_slug": "hbs-foundation",
+          "modrinth_slug": "hbs-foundation",
+          "type": "required"
+        }
+      ]
+    }
+  },
+  "game_versions": {
+    "1.20.1": [
+      "1.20.1"
+    ],
+    "1.21.1": [
+      "1.21.1"
+    ]
+  }
+}

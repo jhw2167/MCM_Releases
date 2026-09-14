@@ -1,0 +1,36 @@
+{
+  "project_key": "MCM_008_HBs-Enchanting",
+  "display_name": "HBs Enchanting (Apotheosis Overhaul)",
+  "curseforge": {
+    "project_id": "1693891",
+    "changelog_type": "markdown",
+    "release_type": "release"
+  },
+  "modrinth": {
+    "project_slug": "hbs-enchanting-apotheosis-overhaul"
+  },
+  "version_name_format": "{mc_version}-{mod_version}",
+  "loaders": {
+    "forge": {
+      "dependencies": [
+        {"id": "balm", "curseforge_slug": "balm", "modrinth_slug": "balm", "type": "required"},
+        {"id": "hbs-foundation", "curseforge_slug": "hbs-foundation", "modrinth_slug": "hbs-foundation", "type": "required"}
+      ]
+    },
+    "neoforge": {
+      "dependencies": [
+        {"id": "balm", "curseforge_slug": "balm", "modrinth_slug": "balm", "type": "required"},
+        {"id": "hbs-foundation", "curseforge_slug": "hbs-foundation", "modrinth_slug": "hbs-foundation", "type": "required"}
+      ]
+    },
+    "fabric": {
+      "dependencies": [
+        {"id": "balm", "curseforge_slug": "balm", "modrinth_slug": "balm", "type": "required"},
+        {"id": "hbs-foundation", "curseforge_slug": "hbs-foundation", "modrinth_slug": "hbs-foundation", "type": "required"}
+      ]
+    }
+  },
+  "game_versions": {
+    "1.20.1": ["1.20.1"]
+  }
+}

@@ -1,0 +1,104 @@
+name: Publish to CurseForge and Modrinth
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p assets
+          gh release download "${{ github.event.release.tag_name }}" --repo "${{ github.repository }}" --dir assets
+          test -f assets/manifest.json || { echo "manifest.json missing from release assets"; exit 1; }
+
+      - name: Read manifest
+        id: manifest
+        run: |
+          echo "curseforge_project_id=$(jq -r '.curseforge.project_id' assets/manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "modrinth_project_slug=$(jq -r '.modrinth.project_slug' assets/manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "mod_version=$(jq -r '.mod_version' assets/manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "version_name=$(jq -r '.version_name' assets/manifest.json)" >> "$GITHUB_OUTPUT"
+
+      # CurseForge's upload API takes numeric game-version IDs, not plain strings like "1.20.1"
+      # or "Forge" - fetch the full list once so each loader's upload can look its IDs up by name.
+      - name: Fetch CurseForge version list
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          curl -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" https://minecraft.curseforge.com/api/game/versions > cf_versions.json
+          jq '.' cf_versions.json > /dev/null
+
+      - name: Upload each loader jar to CurseForge
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          PROJECT_ID="${{ steps.manifest.outputs.curseforge_project_id }}"
+          jq -c '.files[]' assets/manifest.json | while read -r file_entry; do
+            loader=$(echo "$file_entry" | jq -r '.loader')
+            filename=$(echo "$file_entry" | jq -r '.filename')
+            loader_cap="$(tr '[:lower:]' '[:upper:]' <<< "${loader:0:1}")${loader:1}"
+            game_versions=$(jq -c '.resolved_game_versions' assets/manifest.json)
+
+            # match CurseForge's numeric version-list entries by name against the MC versions
+            # in the manifest plus the loader's own name (CurseForge lists loaders as "versions" too)
+            game_version_ids=$(jq -c --argjson names "$game_versions" --arg loader "$loader_cap" '
+              [ .[] | select((.name == $loader) or ([$names[]] | index(.name))) | .id ]
+            ' cf_versions.json)
+
+            release_notes=$(jq -r '.release_notes' assets/manifest.json)
+            changelog_type=$(jq -r '.curseforge.changelog_type' assets/manifest.json)
+            release_type=$(jq -r '.curseforge.release_type' assets/manifest.json)
+            deps=$(jq -c --arg loader "$loader" '.loaders[$loader].dependencies // [] | map({slug: .curseforge_slug, type: .type})' assets/manifest.json)
+
+            metadata=$(jq -n \
+              --arg changelog "$release_notes" \
+              --arg changelogType "$changelog_type" \
+              --arg releaseType "$release_type" \
+              --argjson gameVersions "$game_version_ids" \
+              --argjson relations "$deps" \
+              '{changelog: $changelog, changelogType: $changelogType, releaseType: $releaseType, gameVersions: $gameVersions, relations: {projects: $relations}}')
+
+            echo "Uploading $filename ($loader) to CurseForge project $PROJECT_ID"
+            curl -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+              -F "metadata=$metadata" \
+              -F "file=@assets/$filename" \
+              "https://minecraft.curseforge.com/api/projects/$PROJECT_ID/upload-file"
+          done
+
+      - name: Upload each loader jar to Modrinth
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: |
+          SLUG="${{ steps.manifest.outputs.modrinth_project_slug }}"
+          VERSION_NAME="${{ steps.manifest.outputs.version_name }}"
+          MOD_VERSION="${{ steps.manifest.outputs.mod_version }}"
+          release_notes=$(jq -r '.release_notes' assets/manifest.json)
+          game_versions=$(jq -c '.resolved_game_versions' assets/manifest.json)
+
+          jq -c '.files[]' assets/manifest.json | while read -r file_entry; do
+            loader=$(echo "$file_entry" | jq -r '.loader')
+            filename=$(echo "$file_entry" | jq -r '.filename')
+            deps=$(jq -c --arg loader "$loader" '.loaders[$loader].dependencies // [] | map({project_id: .modrinth_slug, dependency_type: .type})' assets/manifest.json)
+
+            data=$(jq -n \
+              --arg name "$VERSION_NAME ($loader)" \
+              --arg version_number "$MOD_VERSION" \
+              --arg changelog "$release_notes" \
+              --arg project_id "$SLUG" \
+              --arg filename "$filename" \
+              --argjson game_versions "$game_versions" \
+              --argjson loaders "[\"$loader\"]" \
+              --argjson dependencies "$deps" \
+              '{name: $name, version_number: $version_number, changelog: $changelog, dependencies: $dependencies, game_versions: $game_versions, version_type: "release", loaders: $loaders, featured: true, status: "listed", requested_status: "listed", project_id: $project_id, file_parts: [$filename], primary_file: $filename}')
+
+            echo "Uploading $filename ($loader) to Modrinth project $SLUG"
+            curl -sS -X POST "https://api.modrinth.com/v2/version" \
+              -H "Authorization: $MODRINTH_TOKEN" \
+              -F "data=$data" \
+              -F "$filename=@assets/$filename"
+          done
