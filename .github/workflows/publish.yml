@@ -24,16 +24,9 @@ jobs:
           echo "mod_version=$(jq -r '.mod_version' assets/manifest.json)" >> "$GITHUB_OUTPUT"
           echo "version_name=$(jq -r '.version_name' assets/manifest.json)" >> "$GITHUB_OUTPUT"
 
-      # CurseForge's upload API takes numeric game-version IDs, not plain strings like "1.20.1"
-      # or "Forge" - fetch the full list once so each loader's upload can look its IDs up by name.
-      - name: Fetch CurseForge version list
-        env:
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-        run: |
-          curl -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" https://minecraft.curseforge.com/api/game/versions > cf_versions_raw.json
-          # CurseForge groups this response into nested arrays (by version type); flatten to one list of {id,name,...}
-          jq 'flatten' cf_versions_raw.json > cf_versions.json
-
+      # CurseForge's upload-file API (confirmed against CurseForgeGradle's source) takes plain
+      # version-name strings in "gameVersionNames" - no numeric ID lookup needed. Relation types
+      # are also CurseForge-specific strings, different from Modrinth's, so map them here.
       - name: Upload each loader jar to CurseForge
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
@@ -42,30 +35,40 @@ jobs:
           jq -c '.files[]' assets/manifest.json | while read -r file_entry; do
             loader=$(echo "$file_entry" | jq -r '.loader')
             filename=$(echo "$file_entry" | jq -r '.filename')
-            loader_cap="$(tr '[:lower:]' '[:upper:]' <<< "${loader:0:1}")${loader:1}"
-            game_versions=$(jq -c '.resolved_game_versions' assets/manifest.json)
 
-            # match CurseForge's numeric version-list entries by name against the MC versions
-            # in the manifest plus the loader's own name (CurseForge lists loaders as "versions" too)
-            game_version_ids=$(jq -c --argjson names "$game_versions" --arg loader "$loader_cap" '
-              [ .[] | select((.name == $loader) or ([$names[]] | index(.name))) | .id ]
-            ' cf_versions.json)
+            case "$loader" in
+              forge) loader_name="Forge" ;;
+              fabric) loader_name="Fabric" ;;
+              neoforge) loader_name="NeoForge" ;;
+              *) echo "Unknown loader: $loader"; exit 1 ;;
+            esac
+
+            game_version_names=$(jq -c --arg loader "$loader_name" \
+              '.resolved_game_versions + [$loader, "Client", "Server"]' assets/manifest.json)
 
             release_notes=$(jq -r '.release_notes' assets/manifest.json)
             changelog_type=$(jq -r '.curseforge.changelog_type' assets/manifest.json)
             release_type=$(jq -r '.curseforge.release_type' assets/manifest.json)
-            deps=$(jq -c --arg loader "$loader" '.loaders[$loader].dependencies // [] | map({slug: .curseforge_slug, type: .type})' assets/manifest.json)
+            deps=$(jq -c --arg loader "$loader" '
+              def cfType:
+                if . == "required" then "requiredDependency"
+                elif . == "optional" then "optionalDependency"
+                elif . == "embedded" then "embeddedLibrary"
+                else . end;
+              .loaders[$loader].dependencies // [] | map({slug: .curseforge_slug, type: (.type | cfType)})
+            ' assets/manifest.json)
 
             metadata=$(jq -n \
               --arg changelog "$release_notes" \
               --arg changelogType "$changelog_type" \
               --arg releaseType "$release_type" \
-              --argjson gameVersions "$game_version_ids" \
+              --argjson gameVersionNames "$game_version_names" \
               --argjson relations "$deps" \
-              '{changelog: $changelog, changelogType: $changelogType, releaseType: $releaseType, gameVersions: $gameVersions, relations: {projects: $relations}}')
+              '{changelog: $changelog, changelogType: $changelogType, releaseType: $releaseType, gameVersionNames: $gameVersionNames, relations: {projects: $relations}}')
 
             echo "Uploading $filename ($loader) to CurseForge project $PROJECT_ID"
-            curl -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            echo "$metadata" | jq .
+            curl -sS --fail-with-body -H "X-Api-Token: $CURSEFORGE_TOKEN" \
               -F "metadata=$metadata" \
               -F "file=@assets/$filename" \
               "https://minecraft.curseforge.com/api/projects/$PROJECT_ID/upload-file"
@@ -98,7 +101,8 @@ jobs:
               '{name: $name, version_number: $version_number, changelog: $changelog, dependencies: $dependencies, game_versions: $game_versions, version_type: "release", loaders: $loaders, featured: true, status: "listed", requested_status: "listed", project_id: $project_id, file_parts: [$filename], primary_file: $filename}')
 
             echo "Uploading $filename ($loader) to Modrinth project $SLUG"
-            curl -sS -X POST "https://api.modrinth.com/v2/version" \
+            echo "$data" | jq .
+            curl -sS --fail-with-body -X POST "https://api.modrinth.com/v2/version" \
               -H "Authorization: $MODRINTH_TOKEN" \
               -F "data=$data" \
               -F "$filename=@assets/$filename"
