@@ -30,8 +30,9 @@ jobs:
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
         run: |
-          curl -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" https://minecraft.curseforge.com/api/game/versions > cf_versions.json
-          jq '.' cf_versions.json > /dev/null
+          curl -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" https://minecraft.curseforge.com/api/game/versions > cf_versions_raw.json
+          # CurseForge groups this response into nested arrays (by version type); flatten to one list of {id,name,...}
+          jq 'flatten' cf_versions_raw.json > cf_versions.json
 
       - name: Upload each loader jar to CurseForge
         env:
